@@ -35,7 +35,7 @@ def save(queue_name, file):
     file = './{}-{}.json'.format(queue_name, timestamp)
   else:
     queue = deserialize(file)
-    print "Restarting with {} as seed. Tasks: {}".format(file, len(queue))
+    print("Restarting with {} as seed. Tasks: {}".format(file, len(queue)))
 
   def save_progress(tq, last_few):
     with open(file, 'w') as f:
@@ -62,8 +62,8 @@ def save(queue_name, file):
         last_few = []
     save_progress(tq, last_few)
     last_few = []
-    print "done."
-    print "Saved to:", file
+    print("done.")
+    print("Saved to:", file)
 
 @click.command()
 @click.argument('queue_name')
