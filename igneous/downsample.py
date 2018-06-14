@@ -138,7 +138,7 @@ def downsample_with_max_pooling(array, factor):
 
   return output
 
-def downsample_segmentation(data, factor):
+def downsample_segmentation(data, factor, zero_as_background=False):
   """
   Downsampling machine labels requires choosing an actual
   pixel, not a linear combination (or otherwise) of the
@@ -187,14 +187,16 @@ def downsample_segmentation(data, factor):
   # it's possible to write a 3d even to odd to make this 
   # work for all data shapes.
   if is_threed_pot_downsample and sum(modulo_shape) == 0: # power of two downsample on an even shape
-    return downsample_segmentation(countless3d(data), factor / 2)
+    return downsample_segmentation(countless3d(data,zero_as_background=zero_as_background),
+                                   factor / 2,
+                                   zero_as_background=zero_as_background)
 
   if not is_twod_pot_downsample:
     return downsample_with_striding(data, tuple(factor))
 
-  return downsample_segmentation_2d(data, factor)
+  return downsample_segmentation_2d(data, factor, zero_as_background=zero_as_background)
 
-def downsample_segmentation_2d(data, factor):
+def downsample_segmentation_2d(data, factor, zero_as_background=False):
   """
   Call countless2d but manage the image to make it work
   for both even and odd sided images. Swap axes to enable
@@ -222,16 +224,17 @@ def downsample_segmentation_2d(data, factor):
     dtype=data.dtype
   )
   for z in range(data.shape[2]):
-    output[:,:,z,:] = countless2d(data[:,:,z,:])
+    output[:,:,z,:] = countless2d(data[:,:,z,:],
+                                  zero_as_background=zero_as_background)
   
   factor = factor / 2
   factor[preserved_axis] = 1
 
   output = np.swapaxes(output, preserved_axis, 2)
   
-  return downsample_segmentation(output, factor)
+  return downsample_segmentation(output, factor, zero_as_background=zero_as_background)
 
-def countless2d(data):
+def countless2d(data,zero_as_background=False):
   """
   Vectorized implementation of downsampling a 2D labeled
   image by 2 on each side using the COUNTLESS algorithm.
@@ -240,6 +243,7 @@ def countless2d(data):
   generalized algorithm countless.
 
   c.f. https://towardsdatascience.com/countless-high-performance-2x-downsampling-of-labeled-images-using-python-and-numpy-e70ad3275589
+  
   """
   sections = []
 
@@ -249,7 +253,8 @@ def countless2d(data):
 
   # offset from zero, raw countless doesn't handle 0 correctly
   # we'll remove the extra 1 at the end.
-  data += 1
+  if not zero_as_background:
+    data += 1
 
   factor = (2,2)
   for offset in np.ndindex(factor):
@@ -270,18 +275,19 @@ def countless2d(data):
 
   # only need to reset data if we weren't upgraded 
   # b/c no copy was made
-  data -= 1 
+  if not zero_as_background:
+    data -= 1 
 
   return result
 
-def countless3d(data):
+def countless3d(data,zero_as_background=False):
   """return downsampled 2x2x2 data for even sided images."""
   modshape = np.array(data.shape) % 2
   assert sum(modshape) == 0, "COUNTLESS 3D currently only supports even sided images." # someone has to write even_to_odd3d
 
-  return countless(data, (2,2,2))
+  return countless(data, (2,2,2), zero_as_background)
 
-def countless(data, factor):
+def countless(data, factor, zero_as_background=False):
   """
   countless downsamples labeled images (segmentations)
   by finding the mode using vectorized instructions.
@@ -306,7 +312,8 @@ def countless(data, factor):
   mode_of = reduce(lambda x,y: x * y, factor)
   majority = int(math.ceil(float(mode_of) / 2))
 
-  data += 1 # offset from zero
+  if not zero_as_background:
+    data += 1 # offset from zero
   
   for offset in np.ndindex(factor):
     part = data[tuple(np.s_[o::f] for o, f in zip(offset, factor))]
@@ -344,7 +351,8 @@ def countless(data, factor):
     
   results.reverse()
   final_result = lor(reduce(lor, results), sections[-1]) - 1
-  data -= 1
+  if not zero_as_background:
+    data -= 1
   return final_result
 
 
