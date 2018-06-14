@@ -30,7 +30,7 @@ from taskqueue import RegisteredTask
 from igneous import chunks, downsample, downsample_scales
 from igneous import Mesher # broken out for ease of commenting out
 
-def downsample_and_upload(image, bounds, vol, ds_shape, mip=0, axis='z', skip_first=False):
+def downsample_and_upload(image, bounds, vol, ds_shape, mip=0, axis='z', skip_first=False, zero_as_background=False):
     ds_shape = min2(vol.volume_size, ds_shape[:3])
 
     # sometimes we downsample a base layer of 512x512
@@ -55,7 +55,8 @@ def downsample_and_upload(image, bounds, vol, ds_shape, mip=0, axis='z', skip_fi
         image.shape, ds_shape, vol.volume_size, bounds)
       )
 
-    downsamplefn = downsample.method(vol.layer_type)
+    downsamplefn = downsample.method(vol.layer_type,
+                                     zero_as_background=zero_as_background)
 
     vol.mip = mip
     if not skip_first:
@@ -106,12 +107,12 @@ class IngestTask(RegisteredTask):
      The downsample scales should be such that the lowest resolution chunk should be able
      to be produce from the data available.
   """
-  def __init__(self, chunk_path, chunk_encoding, layer_path):
+  def __init__(self, chunk_path, chunk_encoding, layer_path, zero_as_background=False):
     super(IngestTask, self).__init__(chunk_path, chunk_encoding, layer_path)
     self.chunk_path = chunk_path
     self.chunk_encoding = chunk_encoding
     self.layer_path = layer_path
-
+    self.zero_as_background = False
   def execute(self):
     volume = CloudVolume(self.layer_path, mip=0)
     bounds = Bbox.from_filename(self.chunk_path)
@@ -119,7 +120,8 @@ class IngestTask(RegisteredTask):
     image = chunks.decode(image, self.chunk_encoding)
     # BUG: We need to provide some kind of ds_shape independent of the image
     # otherwise the edges of the dataset may not generate as many mip levels.
-    downsample_and_upload(image, bounds, volume, mip=0, ds_shape=image.shape[:3])
+    downsample_and_upload(image, bounds, volume, mip=0, ds_shape=image.shape[:3],
+                          zero_as_background=self.zero_as_background)
 
   def _download_input_chunk(self, bounds):
     storage = Storage(self.layer_path, n_threads=0)
@@ -146,7 +148,7 @@ class DeleteTask(RegisteredTask):
 
 
 class DownsampleTask(RegisteredTask):
-  def __init__(self, layer_path, mip, shape, offset, fill_missing=False, axis='z'):
+  def __init__(self, layer_path, mip, shape, offset, fill_missing=False, axis='z', zero_as_background=False):
     super(DownsampleTask, self).__init__(layer_path, mip, shape, offset, fill_missing, axis)
     self.layer_path = layer_path
     self.mip = mip
@@ -154,13 +156,16 @@ class DownsampleTask(RegisteredTask):
     self.offset = Vec(*offset)
     self.fill_missing = fill_missing
     self.axis = axis
+    self.zero_as_background = zero_as_background
 
   def execute(self):
     vol = CloudVolume(self.layer_path, self.mip, fill_missing=self.fill_missing)
     bounds = Bbox( self.offset, self.shape + self.offset )
     bounds = Bbox.clamp(bounds, vol.bounds)
     image = vol[ bounds.to_slices() ]
-    downsample_and_upload(image, bounds, vol, self.shape, self.mip, self.axis, skip_first=True)
+    downsample_and_upload(image, bounds, vol, self.shape, self.mip, self.axis,
+                          skip_first=True, zero_as_background=self.zero_as_background)
+                    
 
 class QuantizeAffinitiesTask(RegisteredTask):
   def __init__(self, source_layer_path, dest_layer_path, shape, offset, fill_missing=False):

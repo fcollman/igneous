@@ -29,7 +29,7 @@ from igneous.tasks import (
 
 USER_EMAIL = 'ws9@princeton.edu' # for provenance files
 
-def create_ingest_task(storage, task_queue):
+def create_ingest_task(storage, task_queue, zero_as_background=False):
     """
     Creates one task for each ingest chunk present in the build folder.
     It is required that the info file is already placed in order for this task
@@ -40,6 +40,7 @@ def create_ingest_task(storage, task_queue):
           chunk_path=storage.get_path_to_file('build/'+filename),
           chunk_encoding='npz',
           layer_path=storage.layer_path,
+          zero_as_background=zero_as_background
         )
         task_queue.insert(t)
 
@@ -129,7 +130,9 @@ def create_downsample_scales(layer_path, mip, ds_shape, axis='z', preserve_chunk
 
   return vol.commit_info()
 
-def create_downsampling_tasks(task_queue, layer_path, mip=-1, fill_missing=False, axis='z', num_mips=5, preserve_chunk_size=True):
+def create_downsampling_tasks(task_queue, layer_path, mip=-1, fill_missing=False,
+                              axis='z', num_mips=5, preserve_chunk_size=True,
+                              zero_as_background=False):
   
   def ds_shape(mip):
     shape = vol.mip_underlying(mip)[:3]
@@ -153,6 +156,7 @@ def create_downsampling_tasks(task_queue, layer_path, mip=-1, fill_missing=False
       offset=startpt.clone(),
       axis=axis,
       fill_missing=fill_missing,
+      zero_as_background=zero_as_background
     )
     task_queue.insert(task)
   task_queue.wait('Uploading')

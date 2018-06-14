@@ -16,17 +16,18 @@ from __future__ import division
 
 from six.moves import range
 from itertools import combinations
-from functools import reduce
+from functools import reduce, partial
 
 import math
 import operator
 import numpy as np
 
-def method(layer_type):
+def method(layer_type,zero_as_background=False):
   if layer_type == 'image':
     return downsample_with_averaging
   elif layer_type == 'segmentation':
-    return downsample_segmentation
+    return partial(downsample_segmentation,
+                   zero_as_background=zero_as_background)
   elif layer_type == 'activation':
     return downsample_with_max_pooling
   else:
